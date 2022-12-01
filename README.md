@@ -1,2 +1,5 @@
-# electric-bus-smart-charging-optimization
- Code for a electric smart charging platform
+# Electric Bus Smart Charging Optimization platform
+
+ Code for a electric smart charging platform, project from my PhD research.
+ 
+ Abstract: The eff orts concerning climate change mitigation drive the accelerated deployment of electric buses incities. The transition to electric fl eets, however, faces some limitations. Fleets uncoordinated chargingand high charging power requirements may result in major technical problems in power distributionsystems, endangering the bus-system feasibility and grid security. In this context, this research proposesdeveloping an adaptive energy management strategy for electric bus fl eets – including participation invehicle to grid schemes – to tackle the aforementioned issues. The methodological approach resides in applying artificial intelligence techniques to cope with the dynamic behaviour of the bus-grid system incombination with state-of-the-art optimization models and methods. It is expected to design aninnovative adaptative optimization framework that would be an eff ective solution to provide decisionsupport in the transport electrifi cation process in a sustainable city context.
