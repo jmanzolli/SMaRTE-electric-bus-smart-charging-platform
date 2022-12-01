@@ -12,7 +12,7 @@ model = pyo.ConcreteModel()
 
 # DATA
 
-data = pd.read_excel('robust_optimization_small.xlsx', None)
+data = pd.read_excel('input_small.xlsx', None)
 
 i = len(data['Trip time']['Time begin (min)'])
 t = len(data['Energy price']['Energy buying price (per minute)'])
