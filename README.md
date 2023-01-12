@@ -149,11 +149,23 @@ The following parameters are defined in the model:
 
 <h2>🔍 Optimization</h2>
 
-The code uses the CPLEX solver to find the optimal solution for the model. The solver is called using the SolverFactory from the Pyomo library. The optimal solution is returned as an instance of the model.
+The code uses the CPLEX solver, which is a powerful optimization solver, to find the optimal solution for the energy management model. The CPLEX solver is able to handle large and complex optimization problems, making it well-suited for the energy management model. The solver is called using the SolverFactory from the Pyomo library, which allows for easy integration with the Pyomo model. Once the solver is called, it runs the optimization algorithm to find the optimal solution for the model. The optimal solution is returned as an instance of the model, which can be used to access the optimized values of the decision variables and other model parameters. This allows for easy analysis of the results and can be used to make decisions on how to best manage the energy consumption of the fleet of buses.
 
 <h2>📈 Data Visualization</h2>
 
 The code also includes a function to plot the results of the optimization. The function uses the Matplotlib library to plot the energy level of the buses and the power consumption of the chargers over time.
+
+Example:
+
+<figure>
+  <img src="https://user-images.githubusercontent.com/18650693/212105656-78435c87-6558-455f-a2fb-056bdab6e490.png" alt="Chart illustrating the State-of-charge of eight buses" width="600" height="300">
+  <figcaption>Figure 1: Electric bus fleet State-of-Charge variation.</figcaption>
+</figure>
+
+<figure>
+  <img src="https://user-images.githubusercontent.com/18650693/212105914-fb23d1cb-d962-49e9-a740-cd24f8bf8c93.png" alt="Chart illustrating the power requirements of eight buses" width="600" height="300">
+  <figcaption>Figure 2: Electric bus fleet charging power variation</figcaption>
+</figure>
 
 <h2>🏁 Conclusion</h2>
 
