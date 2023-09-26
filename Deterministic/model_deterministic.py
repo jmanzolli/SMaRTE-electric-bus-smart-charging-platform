@@ -1,17 +1,16 @@
 import pyomo.environ as pyo
-from pyomo.opt import SolverFactory
-from pyomo.common.timing import TicTocTimer
-
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-
-data = pd.read_excel('../Instances/input_small.xlsx', None)
+from pyomo.opt import SolverFactory
+from pyomo.common.timing import TicTocTimer
 EXEC_PATH = '/Applications/CPLEX_Studio221/cplex/bin/x86-64_osx/cplex'
 
+# MODEL
 model = pyo.ConcreteModel() # create model
-    
+
 # data
+data = pd.read_excel('Instances/input_small.xlsx', None)
 i = len(data['Trip time']['Time begin (min)'])
 t = len(data['Energy price']['Energy buying price (per minute)'])
 k = len(data['Buses']['Bus (kWh)'])
@@ -25,22 +24,24 @@ alpha = data['Chargers']['Charger (kWh/min)'].tolist()
 beta = data['Chargers']['Charger (kWh/min)'].tolist()
 ch_eff = 0.90
 dch_eff = 1/0.9
+gama = data['Energy consumption']['Uncertain energy (kWh/km*min)'].tolist()
 P = data['Energy price']['Energy buying price (per minute)'].tolist()
 S = data['Energy price']['Energy selling price (per minute)'].tolist()
 E_0 = 0.2
 E_min = 0.2
 E_max = 1
 E_end = 0.2
+C_bat = data['Buses']['Bus (kWh)'].tolist()
 d_off = 20
 d_on = 40
-C_bat = data['Buses']['Bus (kWh)'].tolist()
 U_pow = data['Power price']['Power'].tolist()
 U_price = data['Power price']['Price'].tolist()
 U_max = data['Chargers']['Max Power (kW)'].tolist()
+U_max = U_max[0]
 R = 130
 Ah = 905452
 V = 512
-T = t
+T = len(data['Energy price']['Energy buying price (per minute)'])
 
 # sets
 model.I = pyo.RangeSet(i) # set of trips
@@ -56,9 +57,9 @@ model.alpha = pyo.Param(model.N, initialize=lambda model, n: alpha[n-1]) # charg
 model.beta = pyo.Param(model.N, initialize=lambda model, n: beta[n-1]) # discharging power of charger n
 model.ch_eff = pyo.Param(initialize=ch_eff) # charging efficiency of charger n
 model.dch_eff = pyo.Param(initialize=dch_eff) # discharging efficiency of charger n
+model.gama = pyo.Param(model.I, initialize=lambda model, i: gama[i-1]) # energy consumption
 model.P = pyo.Param(model.T, initialize=lambda model, t: P[t-1]) # electricity purchasing price in time t
 model.S = pyo.Param(model.T, initialize=lambda model, t: S[t-1]) # electricity selling price in time t
-model.gama = pyo.Param(model.I, initialize=lambda model, i: gama[i-1],mutable=True) # energy consumption
 model.E_0 = pyo.Param(initialize=E_0) # initial energy level of bus k
 model.E_min = pyo.Param(initialize=E_min) # minimum energy level allowed for bus k
 model.E_max = pyo.Param(initialize=E_max) # maximum energy level allowed for bus k
@@ -66,7 +67,7 @@ model.E_end = pyo.Param(initialize=E_end) # minimum energy after an operation da
 model.C_bat = pyo.Param(model.K, initialize=lambda model, k: C_bat[k-1]) # total capacity of the bus k battery
 model.U_pow = pyo.Param(model.L, initialize=lambda model, l: U_pow[l-1]) # power level l
 model.U_price = pyo.Param(model.L, initialize=lambda model, l: U_price[l-1]) # purchasing price for power level l
-model.U_max = pyo.Param(initialize=U_max[0]) # contracted power
+model.U_max = pyo.Param(initialize=U_max) # contracted power
 model.R = pyo.Param(initialize=R) # battery replacement costs of the bus k
 model.Ah = pyo.Param(initialize=Ah) # energy consumed until EOL of bus k
 model.V = pyo.Param(initialize=V) # operational voltage of charger n
@@ -85,7 +86,8 @@ model.w_sell = pyo.Var(model.T, within=pyo.NonNegativeReals) # electricity sold 
 model.d = pyo.Var(model.K, model.T, within=pyo.NonNegativeReals) # total degradation cost of the bus k battery at time t
 
 # constraints
-model.constraints = pyo.ConstraintList()
+model.constraints = pyo.ConstraintList()  # Create a set of constraints
+
 #constraint 2
 for k in model.K:
     for t in model.T:
@@ -100,12 +102,12 @@ for i in model.I:
 for i in model.I:
     for k in model.K:
         for t in range(model.T_start[i],model.T_end[i]-1):
-            model.constraints.add(model.b[k,i,t+1] >= model.b[k,i,t])
+             model.constraints.add(model.b[k,i,t+1] >= model.b[k,i,t])
 
 #constraint 5
-for k in model.K:
+for n in model.N:
     for t in model.T:
-        model.constraints.add(sum(model.x[k,n,t] for n in model.N) + sum(model.y[k,n,t] for n in model.N) <= 1)
+         model.constraints.add(sum(model.x[k,n,t] for k in model.K) + sum(model.y[k,n,t] for k in model.K) <= 1)
 
 #constraint 6
 for k in model.K:
@@ -119,27 +121,27 @@ for k in model.K:
 
 #constraint 8.1
 for k in model.K:
-    for n in model.N:
-        for t in range(2,T-d_off):
-            model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1]  + ((1/d_off)*sum(model.x[k,n,j] for j in range(t,t+d_off))) <= 2) # 33
+      for n in model.N:
+          for t in range(2,T-d_off):
+              model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1]  + ((1/d_off)*sum(model.x[k,n,j] for j in range(t,t+d_off))) <= 2) # 33
 
 #constraint 8.2
 for k in model.K:
-    for n in model.N:
-        for t in range(T-d_off+1,T):
-            model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/(T-t+1))*sum(model.x[k,n,j] for j in range(t,T))) <= 2) # 35
+      for n in model.N:
+          for t in range(T-d_off+1,T):
+              model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/(T-t+1))*sum(model.x[k,n,j] for j in range(t,T))) <= 2) # 35
 
 #constraint 8.3
 for k in model.K:
-    for n in model.N:
-        for t in range(2,T-d_on):
-            model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/d_on)*sum(model.x[k,n,j] for j in range(t,t+d_on))) >= 1) # 34
+     for n in model.N:
+         for t in range(2,T-d_on):
+             model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/d_on)*sum(model.x[k,n,j] for j in range(t,t+d_on))) >= 1) # 34
 
 #constraint 8.4
 for k in model.K:
-    for n in model.N:
-        for t in range(T-d_on+1,T):
-            model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/(T-t+1))*sum(model.x[k,n,j] for j in range(t,T))) >= 1) # 36
+     for n in model.N:
+         for t in range(T-d_on+1,T):
+             model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/(T-t+1))*sum(model.x[k,n,j] for j in range(t,T))) >= 1) # 36
 
 #constraint 9.1
 for t in model.T:
@@ -189,12 +191,10 @@ def rule_obj(mod):
 model.obj = pyo.Objective(rule=rule_obj, sense=pyo.minimize)
 
 # SOLVER
-
 opt = pyo.SolverFactory('cplex',executable=EXEC_PATH)
 results = opt.solve(model)
 
 # RESULTS VISUALIZATION
-
 def energy_bus(K,T,e):
     bus_list = []
     energy_list = []
