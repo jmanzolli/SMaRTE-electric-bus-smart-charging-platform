@@ -149,7 +149,7 @@ The following parameters are defined in the model:
 
 <h2>🔍 Optimization</h2>
 
-The code uses the CPLEX solver, which is a powerful optimization solver, to find the optimal solution for the energy management model. The CPLEX solver is able to handle large and complex optimization problems, making it well-suited for the energy management model. The solver is called using the SolverFactory from the Pyomo library, which allows for easy integration with the Pyomo model. Once the solver is called, it runs the optimization algorithm to find the optimal solution for the model. The optimal solution is returned as an instance of the model, which can be used to access the optimized values of the decision variables and other model parameters. This allows for easy analysis of the results and can be used to make decisions on how to best manage the energy consumption of the fleet of buses.
+The code uses the Gurobi solver, which is a powerful optimization solver, to find the optimal solution for the energy management model. The Gurobi solver is able to handle large and complex optimization problems, making it well-suited for the energy management model. The solver is called using the SolverFactory from the Pyomo library, which allows for easy integration with the Pyomo model. Once the solver is called, it runs the optimization algorithm to find the optimal solution for the model. The optimal solution is returned as an instance of the model, which can be used to access the optimized values of the decision variables and other model parameters. This allows for easy analysis of the results and can be used to make decisions on how to best manage the energy consumption of the fleet of buses.
 
 <h2>📈 Data Visualization</h2>
 
