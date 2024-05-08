@@ -1,6 +1,6 @@
 <h1>🚍 SMaRTE - System for the Management and Robustness of Transportation Electrification 🔋</h1>
 <h2>🚀 Introduction</h2>
-This code is an implementation of an energy management model for buses using the Pyomo library in Python. The model is designed to optimize the use of energy by charging and discharging the buses' batteries at the right time in order to minimize the overall cost of energy consumption. The model takes into account various parameters such as the trip time, energy prices, bus and charger characteristics, and power prices. The code uses the CPLEX solver to find the optimal solution.
+This code is an implementation of an energy management model for buses using the Pyomo library in Python. The model is designed to optimize the use of energy by charging and discharging the buses' batteries at the right time in order to minimize the overall cost of energy consumption. The model takes into account various parameters such as the trip time, energy prices, bus and charger characteristics, and power prices. The code uses the Gurobi solver to find the optimal solution.
 
 <h2>📊 Data Input</h2>
 
