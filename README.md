@@ -1,172 +1,75 @@
-<h1>🚍 SMaRTE - System for the Management and Robustness of Transportation Electrification 🔋</h1>
-<h2>🚀 Introduction</h2>
-This code is an implementation of an energy management model for buses using the Pyomo library in Python. The model is designed to optimize the use of energy by charging and discharging the buses' batteries at the right time in order to minimize the overall cost of energy consumption. The model takes into account various parameters such as the trip time, energy prices, bus and charger characteristics, and power prices. The code uses the Gurobi solver to find the optimal solution.
+# SMaRTE - System for the Management and Robustness of Transportation Electrification
 
-<h2>📊 Data Input</h2>
+## Overview
 
-The code reads the input data from an Excel file using the Pandas library. The input data includes the following sheets:
+Welcome to the SMaRTE (System for the Management and Robustness of Transportation Electrification) platform! This project aims to optimise the charging schedules for electric bus fleets, minimising energy costs and maximising efficiency using advanced optimisation techniques.
 
-<ul>
-  <li>Trip time: contains the start and end times of each trip</li>
-  <li>Energy price: contains the buying and selling prices of energy at each time step</li>
-  <li>Buses: contains the characteristics of each bus, such as the battery capacity</li>
-  <li>Chargers: contains the characteristics of each charger, such as the charging and discharging power</li>
-  <li>Power price: contains the power and prices of peak power levels</li>
-</ul>
+## Features
 
-<h2>🔧 Model Construction</h2>
+- **Optimised Charging Schedules**: Utilises Pyomo and the Gurobi solver to find cost-effective charging times.
+- **Data-Driven Decisions**: Incorporates real-world data on trip schedules, energy prices, bus characteristics, and charger capabilities.
+- **Scalable and Flexible**: Can be adapted to various fleet sizes and energy market conditions.
 
-The model is created using the Pyomo library and is defined as a concrete model. The following sets are defined in the model:
+## Getting Started
 
-<table>
-  <tr>
-    <th>Set Name</th>
-    <th>Description</th>
-  </tr>
-  <tr>
-    <td>I</td>
-    <td>Set of trips</td>
-  </tr>
-  <tr>
-    <td>T</td>
-    <td>Set of timesteps</td>
-  </tr>
-  <tr>
-    <td>K</td>
-    <td>Set of buses</td>
-  </tr>
-  <tr>
-    <td>N</td>
-    <td>Set of chargers</td>
-  </tr>
-  <tr>
-    <td>L</td>
-    <td>Set of peak power levels</td>
-  </tr>
-</table>
+### Prerequisites
 
-The following parameters are defined in the model:
+- Python 3.x
+- Pyomo
+- Gurobi
+- Pandas
+- OpenPyXL
 
+### Installation
 
-<table>
-  <tr>
-    <th>Parameter</th>
-    <th>Description</th>
-  </tr>
-  <tr>
-    <td>T_start</td>
-    <td>Start time of each trip</td>
-  </tr>
-  <tr>
-    <td>T_end</td>
-    <td>End time of each trip</td>
-  </tr>
-  <tr>
-    <td>alpha</td>
-    <td>Charging power of each charger</td>
-  </tr>
-  <tr>
-    <td>beta</td>
-    <td>Discharging power of each charger</td>
-  </tr>
-  <tr>
-    <td>ch_eff</td>
-    <td>Charging efficiency of charger</td>
-  </tr>
-  <tr>
-    <td>dch_eff</td>
-    <td>Discharging efficiency of charger</td>
-  </tr>
-  <tr>
-    <td>P</td>
-    <td>Electricity purchasing price at each time step</td>
-  </tr>
-  <tr>
-    <td>S</td>
-    <td>Electricity selling price at each time step</td>
-  </tr>
-  <tr>
-    <td>gama</td>
-    <td>Energy consumption for each trip</td>
-  </tr>
-  <tr>
-    <td>E_0</td>
-    <td>Initial energy level of each bus</td>
-  </tr>
-  <tr>
-    <td>E_min</td>
-    <td>Minimum energy level of each bus</td>
-  </tr>
-  <tr>
-    <td>E_max</td>
-    <td>Maximum energy level of each bus</td>
-  </tr>
-  <tr>
-    <td>E_end</td>
-    <td>Final energy level of each bus</td>
-  </tr>
-  <tr>
-    <td>d_off</td>
-    <td>Duration of switch off of the charger</td>
-  </tr>
-  <tr>
-    <td>d_on</td>
-    <td>Duration of switch on of the charger</td>
-  </tr>
-  <tr>
-    <td>C_bat</td>
-    <td>Battery capacity of each bus</td>
-  </tr>
-  <tr>
-    <td>U_pow</td>
-    <td>Peak power level</td>
-  </tr>
-  <tr>
-    <td>U_price</td>
-    <td>Price of peak power level</td>
-  </tr>
-  <tr>
-    <td>U_max</td>
-    <td>Maximum power of each charger</td>
-  </tr>
-  <tr>
-    <td>R</td>
-    <td>Battery replacement costs</td>
-  </tr>
-  <tr>
-    <td>Ah</td>
-    <td>Ampere hour of the bus</td>
-  </tr>
-  <tr>
-    <td>V</td>
-    <td> Voltage of the bus</td>
-   </tr>
-  <tr>
-    <td>T</td>
-    <td> Number of timesteps</td>
-   </tr>
-</table>
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/jmanzolli/SMaRTE-electric-bus-smart-charging-platform.git
+   cd SMaRTE-electric-bus-smart-charging-platform
+   ```
 
-<h2>🔍 Optimization</h2>
+2. Install the required packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-The code uses the Gurobi solver, which is a powerful optimization solver, to find the optimal solution for the energy management model. The Gurobi solver is able to handle large and complex optimization problems, making it well-suited for the energy management model. The solver is called using the SolverFactory from the Pyomo library, which allows for easy integration with the Pyomo model. Once the solver is called, it runs the optimization algorithm to find the optimal solution for the model. The optimal solution is returned as an instance of the model, which can be used to access the optimized values of the decision variables and other model parameters. This allows for easy analysis of the results and can be used to make decisions on how to best manage the energy consumption of the fleet of buses.
+3. Ensure Gurobi is installed and properly configured. Refer to the [Gurobi installation guide](https://www.gurobi.com/documentation/9.1/quickstart_linux/software_installation_guid.html).
 
-<h2>📈 Data Visualization</h2>
+### Running the Model
 
-The code also includes a function to plot the results of the optimization. The function uses the Matplotlib library to plot the energy level of the buses and the power consumption of the chargers over time.
+1. Prepare your input data in an Excel file, structured as follows:
+   - **Trip time**: Start and end times of each trip.
+   - **Energy price**: Buying and selling prices at each timestep.
+   - **Buses**: Battery capacity and other characteristics of each bus.
+   - **Chargers**: Charging and discharging power for each charger.
+   - **Power price**: Power prices at different peak levels.
 
-Example:
+2. Update the `config.yaml` file with the path to your input data and other configuration parameters.
 
-<figure>
-  <img src="https://user-images.githubusercontent.com/18650693/212105656-78435c87-6558-455f-a2fb-056bdab6e490.png" alt="Chart illustrating the State-of-charge of eight buses" width="600" height="300">
-  <figcaption>Figure 1: Electric bus fleet State-of-Charge variation.</figcaption>
-</figure>
+3. Run the optimisation script:
+   ```bash
+   python optimise_charging.py
+   ```
 
-<figure>
-  <img src="https://user-images.githubusercontent.com/18650693/212105914-fb23d1cb-d962-49e9-a740-cd24f8bf8c93.png" alt="Chart illustrating the power requirements of eight buses" width="600" height="300">
-  <figcaption>Figure 2: Electric bus fleet charging power variation</figcaption>
-</figure>
+### Output
 
-<h2>🏁 Conclusion</h2>
+The results will be saved in the `results` directory, including:
+- Optimised charging schedules
+- Energy cost breakdowns
+- Visualisations of energy and charging patterns
 
-In conclusion, the above code is a Pyomo implementation of a mathematical optimization model for managing energy consumption in a fleet of buses. It takes in a data file in Excel format and a list of energy consumption values (gama) as input, and creates a Pyomo ConcreteModel object that represents the model. The model includes sets for trips, timesteps, buses, chargers, and peak power levels, as well as parameters for various data such as trip start and end times, charging and discharging power of chargers, electricity prices, and energy consumption values. The code can be extended with additional constraints and objectives as needed, and can be solved using a variety of optimization solvers, including the CPLEX solver which is called in this code using the SolverFactory. Overall, this code provides a flexible and powerful framework for managing energy consumption in a fleet of buses.
+## Contributing
+
+We welcome contributions to enhance the platform! Please fork the repository and submit a pull request with your improvements.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgements
+
+This project utilises the Pyomo library for optimisation modelling and the Gurobi solver for finding optimal solutions. Special thanks to all contributors and the open-source community.
+
+---
+
+For more details, visit our [GitHub page](https://github.com/jmanzolli/SMaRTE-electric-bus-smart-charging-platform).
