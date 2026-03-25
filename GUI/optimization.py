@@ -1,27 +1,52 @@
 import pyomo.environ as pyo
 from pyomo.opt import SolverFactory
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import time
+from pathlib import Path
 
-def read_file(input='input_gui.xlsx'):
-    data = pd.read_excel(input, None)
+# Results directory relative to this file (GUI/ -> project root / Results/)
+_RESULTS_DIR = Path(__file__).parent.parent / "Results"
+
+
+def read_file(input_path):
+    data = pd.read_excel(input_path, None)
     return data
 
-def setData(data, d_off=4, d_on=1, ch_eff = 0.90, E_0 = 0.2, E_min = 0.2, E_max = 1, E_end = 0.2):
-    T_start = data['Dataset']['Trip (Begin)'].tolist()
-    T_start = [x for x in T_start if str(x) != 'nan']
+
+def get_fleet_summary(data):
+    """Return a dict with fleet stats from the loaded Dataset sheet."""
+    try:
+        T_start = [x for x in data['Dataset']['Trip (Begin)'].tolist() if str(x) != 'nan']
+        C_bat   = [x for x in data['Dataset']['Buses'].tolist()         if str(x) != 'nan']
+        alpha   = [x for x in data['Dataset']['Charger'].tolist()       if str(x) != 'nan']
+        Price   = [x for x in data['Dataset']['Energy price'].tolist()  if str(x) != 'nan']
+        return {
+            'trips':      len(T_start),
+            'buses':      len(C_bat),
+            'chargers':   len(alpha),
+            'timesteps':  len(Price),
+        }
+    except Exception:
+        return {}
+
+
+def check_solver(solver_name):
+    """Return True if the named solver is available on this system."""
+    return pyo.SolverFactory(solver_name).available()
+
+
+def setData(data, d_off=4, d_on=1, ch_eff=0.90, E_0=0.2, E_min=0.2, E_max=1, E_end=0.2):
+    T_start = [x for x in data['Dataset']['Trip (Begin)'].tolist() if str(x) != 'nan']
     T_start = [int(x) for x in T_start]
-    T_end = data['Dataset']['Trip (End)'].tolist()
-    T_end = [x for x in T_end if str(x) != 'nan']
-    T_end = [int(x) for x in T_end]
-    alpha = data['Dataset']['Charger'].tolist()
-    alpha = [x for x in alpha if str(x) != 'nan']
-    gama = data['Dataset']['Energy consumption'].tolist()
-    gama = gama[0]
-    Price = data['Dataset']['Energy price'].tolist()
-    C_bat = data['Dataset']['Buses'].tolist()
-    C_bat = [x for x in C_bat if str(x) != 'nan']
+    T_end   = [x for x in data['Dataset']['Trip (End)'].tolist()   if str(x) != 'nan']
+    T_end   = [int(x) for x in T_end]
+    alpha   = [x for x in data['Dataset']['Charger'].tolist()      if str(x) != 'nan']
+    gama    = data['Dataset']['Energy consumption'].tolist()[0]
+    Price   = data['Dataset']['Energy price'].tolist()
+    C_bat   = [x for x in data['Dataset']['Buses'].tolist()        if str(x) != 'nan']
     t = len(Price)
     k = len(C_bat)
     n = len(alpha)
@@ -29,180 +54,246 @@ def setData(data, d_off=4, d_on=1, ch_eff = 0.90, E_0 = 0.2, E_min = 0.2, E_max 
     i = len(T_start)
     return T_start, T_end, alpha, ch_eff, gama, Price, E_0, E_min, E_max, E_end, C_bat, d_off, d_on, t, k, n, T, i
 
-def solveModel(data,time_limit=60,mipgap=0.01,solver='gurobi',status=False):
 
-    T_start, T_end, alpha, ch_eff, gama, P, E_0, E_min, E_max, E_end, C_bat, d_off, d_on, t, k, n, T, i = setData(data)
-    
+def solveModel(data, time_limit=60, mipgap=0.01, solver='gurobi',
+               log_callback=None, status=False):
+    """
+    Build and solve the charging optimisation model.
+
+    Parameters
+    ----------
+    data         : dict of DataFrames from read_file()
+    time_limit   : solver wall-clock time limit in seconds
+    mipgap       : relative MIP optimality gap tolerance
+    solver       : 'gurobi' or 'cplex'
+    log_callback : callable(str) invoked with progress messages
+    status       : if True, pipe full solver log to stdout
+
+    Returns
+    -------
+    Solved Pyomo ConcreteModel with extra attributes:
+        _solve_time       – elapsed seconds
+        _termination      – solver termination condition string
+        _total_energy_kwh – total energy purchased (kWh)
+    """
+
+    def _log(msg):
+        if log_callback:
+            log_callback(msg)
+
+    T_start, T_end, alpha, ch_eff, gama, P, E_0, E_min, E_max, E_end, \
+        C_bat, d_off, d_on, t, k, n, T, i = setData(data)
+
+    opt = pyo.SolverFactory(solver)
+    if not opt.available():
+        raise RuntimeError(
+            f"Solver '{solver}' is not available on this system.\n"
+            "Install Gurobi (gurobipy) or IBM CPLEX and ensure a valid licence."
+        )
+
+    _log(f"Building model: {k} bus(es), {n} charger(s), {i} trip(s), {T} timesteps")
+
     model = pyo.ConcreteModel()
-    
-    #ranges
-    model.I = pyo.RangeSet(i) # set of trips
-    model.T = pyo.RangeSet(t) # set of timesteps
-    model.K = pyo.RangeSet(k) # set of buses
-    model.N = pyo.RangeSet(n) # set of chargers
-    
-    #parameters
-    model.T_start = pyo.Param(model.I, initialize=lambda model, i: T_start[i-1]) # start time of trip i
-    model.T_end = pyo.Param(model.I, initialize=lambda model, i: T_end[i-1]) # end time of trip i
-    model.alpha = pyo.Param(model.N, initialize=lambda model, n: alpha[n-1]) # charging power of charger n
-    model.ch_eff = pyo.Param(initialize=ch_eff) # charging efficiency of charger n
-    model.gama = pyo.Param(initialize=gama) # energy consumption
-    model.P = pyo.Param(model.T, initialize=lambda model, t: P[t-1]) # electricity purchasing price in time t
-    model.E_0 = pyo.Param(initialize=E_0) # initial energy level of bus k
-    model.E_min = pyo.Param(initialize=E_min) # minimum energy level allowed for bus k
-    model.E_max = pyo.Param(initialize=E_max) # maximum energy level allowed for bus k
-    model.E_end = pyo.Param(initialize=E_end) # minimum energy after an operation day for bus k
-    model.C_bat = pyo.Param(model.K, initialize=lambda model, k: C_bat[k-1]) # total capacity of the bus k battery
 
-    #binary variables
-    model.b = pyo.Var(model.K,model.I, model.T, within=pyo.Binary) # binary variable indicating if bus k is serving trip i at time t
-    model.x = pyo.Var(model.K, model.N, model.T, domain=pyo.Binary) # binary variable indicating if bus k is occupying a charger n at time t to charge
-    model.c = pyo.Var(model.K, model.T, domain=pyo.Binary) # binary variable indicating if bus k is charging/discharging at time t
-    
-    #non-negative variables
-    model.e = pyo.Var(model.K, model.T, within=pyo.NonNegativeReals) # energy level of bus k at time t
-    model.w_buy = pyo.Var(model.T, within=pyo.NonNegativeReals) # electricity purchased from the grid at time t
+    model.I = pyo.RangeSet(i)
+    model.T = pyo.RangeSet(t)
+    model.K = pyo.RangeSet(k)
+    model.N = pyo.RangeSet(n)
 
-    #objective function
+    model.T_start = pyo.Param(model.I, initialize=lambda m, i: T_start[i - 1])
+    model.T_end   = pyo.Param(model.I, initialize=lambda m, i: T_end[i - 1])
+    model.alpha   = pyo.Param(model.N, initialize=lambda m, n: alpha[n - 1])
+    model.ch_eff  = pyo.Param(initialize=ch_eff)
+    model.gama    = pyo.Param(initialize=gama)
+    model.P       = pyo.Param(model.T, initialize=lambda m, t: P[t - 1])
+    model.E_0     = pyo.Param(initialize=E_0)
+    model.E_min   = pyo.Param(initialize=E_min)
+    model.E_max   = pyo.Param(initialize=E_max)
+    model.E_end   = pyo.Param(initialize=E_end)
+    model.C_bat   = pyo.Param(model.K, initialize=lambda m, k: C_bat[k - 1])
+
+    model.b     = pyo.Var(model.K, model.I, model.T, within=pyo.Binary)
+    model.x     = pyo.Var(model.K, model.N, model.T, domain=pyo.Binary)
+    model.c     = pyo.Var(model.K, model.T, domain=pyo.Binary)
+    model.e     = pyo.Var(model.K, model.T, within=pyo.NonNegativeReals)
+    model.w_buy = pyo.Var(model.T, within=pyo.NonNegativeReals)
+
     def rule_obj(mod):
-        return sum(mod.P[t]*mod.w_buy[t] for t in mod.T)
+        return sum(mod.P[t] * mod.w_buy[t] for t in mod.T)
     model.obj = pyo.Objective(rule=rule_obj, sense=pyo.minimize)
 
-    #constraints
-    model.constraints = pyo.ConstraintList()  # Create a set of constraints
-    #constraint 1
-    for k in model.K:
-        for t in model.T:
-            model.constraints.add(sum(model.b[k,i,t] for i in model.I) + model.c[k,t] <=1)
-            model.constraints.add(sum(model.x[k,n,t] for n in model.N) <= model.c[k,t])
-    #constraint 2
-    for n in model.N:
-        for t in model.T:
-            model.constraints.add(sum(model.x[k,n,t] for k in model.K) <= 1)
-    #constraint 3
-    for i in model.I: 
-        for t in range(model.T_start[i],model.T_end[i]):
-            model.constraints.add(sum(model.b[k,i,t] for k in model.K) == 1)
-    
-        for t in range(1,model.T_start[i]):
-            model.constraints.add(sum(model.b[k,i,t] for k in model.K) == 0)
-    
-        for t in range(model.T_end[i],T+1):
-            model.constraints.add(sum(model.b[k,i,t] for k in model.K) == 0)
-    #constraint 4
-    for i in model.I:
-        for k in model.K:
-            for t in range(model.T_start[i],model.T_end[i]-1):
-                model.constraints.add(model.b[k,i,t+1] >= model.b[k,i,t])
-    #constraint 5
-    for k in model.K:
-        for t in range(2,T+1):
-            model.constraints.add(model.e[k,t] == model.e[k,t-1] + sum(model.ch_eff*model.alpha[n]*model.x[k,n,t] for n in model.N) - sum(model.gama * model.b[k,i,t] for i in model.I))
-    #constraint 6
-    for t in model.T:
-        model.constraints.add(sum(model.ch_eff*model.alpha[n]*model.x[k,n,t] for n in model.N for k in model.K) == model.w_buy[t])
-    #constraint 7
-    for k in model.K:
-        for n in model.N:
-            for t in range(2,T-d_off):
-                model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1]  + ((1/d_off)*sum(model.x[k,n,j] for j in range(t,t+d_off))) <= 2) # 33
-    #constraint 8
-    for k in model.K:
-        for n in model.N:
-            for t in range(T-d_off+1,T):
-                model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/(T-t+1))*sum(model.x[k,n,j] for j in range(t,T))) <= 2) # 35
-    #constraint 9
-    for k in model.K:
-        for n in model.N:
-            for t in range(2,T-d_on):
-                model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/d_on)*sum(model.x[k,n,j] for j in range(t,t+d_on))) >= 1) # 34
-    #constraint 10
-    for k in model.K:
-        for n in model.N:
-            for t in range(T-d_on+1,T):
-                model.constraints.add(1 - model.x[k,n,t] + model.x[k,n,t-1] + ((1/(T-t+1))*sum(model.x[k,n,j] for j in range(t,T))) >= 1) # 36
-    #constraint 11
-    for k in model.K:
-        for t in model.T:
-            model.constraints.add(model.e[k,t] >= model.C_bat[k] * model.E_min)
-    #constraint 12
-    for k in model.K:
-        for t in model.T:
-            model.constraints.add(E_max * model.C_bat[k] >= model.e[k,t])          
-    #constraint 13
-    for k in model.K:
-        model.constraints.add(model.e[k,1] == model.E_0*model.C_bat[k])
-    #constraint 14
-    for k in model.K:
-        model.constraints.add(model.e[k,T] >= model.E_end*model.C_bat[k])   
-    
-    # solving routine
-    opt = pyo.SolverFactory(solver)
+    model.constraints = pyo.ConstraintList()
+
+    for kk in model.K:
+        for tt in model.T:
+            model.constraints.add(
+                sum(model.b[kk, ii, tt] for ii in model.I) + model.c[kk, tt] <= 1)
+            model.constraints.add(
+                sum(model.x[kk, nn, tt] for nn in model.N) <= model.c[kk, tt])
+
+    for nn in model.N:
+        for tt in model.T:
+            model.constraints.add(sum(model.x[kk, nn, tt] for kk in model.K) <= 1)
+
+    for ii in model.I:
+        for tt in range(model.T_start[ii], model.T_end[ii]):
+            model.constraints.add(sum(model.b[kk, ii, tt] for kk in model.K) == 1)
+        for tt in range(1, model.T_start[ii]):
+            model.constraints.add(sum(model.b[kk, ii, tt] for kk in model.K) == 0)
+        for tt in range(model.T_end[ii], T + 1):
+            model.constraints.add(sum(model.b[kk, ii, tt] for kk in model.K) == 0)
+
+    for ii in model.I:
+        for kk in model.K:
+            for tt in range(model.T_start[ii], model.T_end[ii] - 1):
+                model.constraints.add(model.b[kk, ii, tt + 1] >= model.b[kk, ii, tt])
+
+    for kk in model.K:
+        for tt in range(2, T + 1):
+            model.constraints.add(
+                model.e[kk, tt] == model.e[kk, tt - 1]
+                + sum(model.ch_eff * model.alpha[nn] * model.x[kk, nn, tt] for nn in model.N)
+                - sum(model.gama * model.b[kk, ii, tt] for ii in model.I))
+
+    for tt in model.T:
+        model.constraints.add(
+            sum(model.ch_eff * model.alpha[nn] * model.x[kk, nn, tt]
+                for nn in model.N for kk in model.K) == model.w_buy[tt])
+
+    for kk in model.K:
+        for nn in model.N:
+            for tt in range(2, T - d_off):
+                model.constraints.add(
+                    1 - model.x[kk, nn, tt] + model.x[kk, nn, tt - 1]
+                    + ((1 / d_off) * sum(model.x[kk, nn, j] for j in range(tt, tt + d_off))) <= 2)
+            for tt in range(T - d_off + 1, T):
+                model.constraints.add(
+                    1 - model.x[kk, nn, tt] + model.x[kk, nn, tt - 1]
+                    + ((1 / (T - tt + 1)) * sum(model.x[kk, nn, j] for j in range(tt, T))) <= 2)
+            for tt in range(2, T - d_on):
+                model.constraints.add(
+                    1 - model.x[kk, nn, tt] + model.x[kk, nn, tt - 1]
+                    + ((1 / d_on) * sum(model.x[kk, nn, j] for j in range(tt, tt + d_on))) >= 1)
+            for tt in range(T - d_on + 1, T):
+                model.constraints.add(
+                    1 - model.x[kk, nn, tt] + model.x[kk, nn, tt - 1]
+                    + ((1 / (T - tt + 1)) * sum(model.x[kk, nn, j] for j in range(tt, T))) >= 1)
+
+    for kk in model.K:
+        for tt in model.T:
+            model.constraints.add(model.e[kk, tt] >= model.C_bat[kk] * model.E_min)
+            model.constraints.add(E_max * model.C_bat[kk] >= model.e[kk, tt])
+        model.constraints.add(model.e[kk, 1] == model.E_0 * model.C_bat[kk])
+        model.constraints.add(model.e[kk, T] >= model.E_end * model.C_bat[kk])
+
     if time_limit:
         opt.options['timelimit'] = time_limit
     if mipgap:
         opt.options['mipgap'] = mipgap
-    opt.solve(model,tee=status)
-    print('The objective function values is:', model.obj())
 
+    _log(f"Solving with {solver} (time limit: {time_limit}s, MIP gap: {mipgap*100:.0f}%)...")
+    t0 = time.time()
+    results_obj = opt.solve(model, tee=status)
+    solve_time = time.time() - t0
+
+    termination = str(results_obj.solver.termination_condition)
+    total_energy = sum(pyo.value(model.w_buy[tt]) * 4 for tt in model.T)  # convert to kWh (×4 for 15-min slots)
+
+    model._solve_time       = solve_time
+    model._termination      = termination
+    model._total_energy_kwh = total_energy
+
+    _log(f"Done in {solve_time:.1f}s — Termination: {termination} — Obj: {model.obj():.4f}")
     return model
 
-def energy_bus(K,T,e,C_bat):
-    bus_list = []
-    energy_list = []
-    for k in K:
-        bus_number = 'bus' + ' ' + str(k)
-        bus_list.append(bus_number)
-    for t in T:
-        for  k in K:
-            energy_list.append(pyo.value(e[k,t]))
-    energy_array = np.reshape(energy_list, (len(T), len(bus_list)))
-    Energy = pd.DataFrame(energy_array,index=T, columns=bus_list)
-    for k in K:
-        Energy_perc = (Energy*100)/C_bat[k]
+
+def energy_bus(K, T, e, C_bat):
+    """
+    Return (Energy [kWh], Energy_perc [%]) DataFrames.
+
+    Fixes the original bug where every column was divided by the last
+    bus's capacity instead of its own.
+    """
+    bus_labels = [f'Bus {k}' for k in K]
+    energy_vals = [[pyo.value(e[k, t]) for k in K] for t in T]
+    Energy = pd.DataFrame(energy_vals, index=list(T), columns=bus_labels)
+    cap    = {k: pyo.value(C_bat[k]) for k in K}
+    Energy_perc = pd.DataFrame(
+        {f'Bus {k}': Energy[f'Bus {k}'] * 100.0 / cap[k] for k in K}
+    )
     return Energy, Energy_perc
 
-def power(T,w):
-    transac_list = []
-    for t in T:
-        value = pyo.value(w[t])
-        transac_list.append(value)
-    W = pd.DataFrame(transac_list, index=T, columns=['Power'])
+
+def power(T, w):
+    W = pd.DataFrame(
+        [pyo.value(w[t]) for t in T],
+        index=list(T),
+        columns=['Power']
+    )
     return W
 
-def save_results(model):
-    #Calculate energy
-    Energy,Energy_perc = energy_bus(model.K, model.T, model.e, model.C_bat)
-    #Calculate power buy
+
+def save_results(model, output_path=None):
+    """
+    Save optimisation results to an Excel workbook.
+
+    If output_path is None the file is written to <project_root>/Results/output.xlsx.
+    Returns the Path that was written.
+    """
+    if output_path is None:
+        _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = _RESULTS_DIR / "output.xlsx"
+
+    Energy, Energy_perc = energy_bus(model.K, model.T, model.e, model.C_bat)
     Power = power(model.T, model.w_buy) * 4
-    #Calculate objective function value
-    Obj = pd.DataFrame({'Objective Value': [model.obj()]})
-    #Save data to Excel with the name of t_start
-    with pd.ExcelWriter('/Users/natomanzolli/Documents/GitHub/Electric Bus Smart Charging/Results/output.xlsx') as writer:  
-        Energy.to_excel(writer, sheet_name='Energy')
+    Obj   = pd.DataFrame({'Objective Value': [model.obj()]})
+
+    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+        Energy.to_excel(writer,      sheet_name='Energy')
         Energy_perc.to_excel(writer, sheet_name='SOC')
-        Power.to_excel(writer, sheet_name='Power')
-        Obj.to_excel(writer, sheet_name='Optimal value')
-    print('The outputs are saved')
+        Power.to_excel(writer,       sheet_name='Power')
+        Obj.to_excel(writer,         sheet_name='Optimal value')
+
+    return Path(output_path)
+
 
 def plot(model):
-    # Generate energy data
+    """Plot bus SOC profiles and grid power demand in a styled figure."""
     Energy, Energy_perc = energy_bus(model.K, model.T, model.e, model.C_bat)
-    # Generate power data
     Power = power(model.T, model.w_buy) * 4
-    # Create a figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
-    # Plot Energy (SOC) on the first subplot
-    Energy_perc.plot(ax=ax1)
-    ax1.set_xlabel('Time')
+
+    BG_DARK = '#2D2E32'
+    BG_MID  = '#3C3D41'
+    FG      = '#E8E9EB'
+    GRID_C  = '#555659'
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 10), facecolor=BG_DARK)
+    fig.suptitle('SMaRTE — Optimised Charging Schedule', color=FG,
+                 fontsize=14, fontweight='bold', y=0.98)
+
+    for ax in (ax1, ax2):
+        ax.set_facecolor(BG_MID)
+        ax.tick_params(colors=FG, labelsize=9)
+        ax.xaxis.label.set_color(FG)
+        ax.yaxis.label.set_color(FG)
+        ax.title.set_color(FG)
+        ax.grid(True, color=GRID_C, linewidth=0.5, linestyle='--')
+        for spine in ax.spines.values():
+            spine.set_edgecolor(GRID_C)
+
+    Energy_perc.plot(ax=ax1, linewidth=1.8)
+    ax1.axhline(y=20, color='#EF5350', linestyle='--', linewidth=1.0, label='SOC min (20%)')
+    ax1.set_xlabel('Timestep [min]')
     ax1.set_ylabel('State of Charge [%]')
-    ax1.set_title('Energy (SOC) Over Time')
-    # Plot charging Power on the second subplot
-    Power.plot(ax=ax2)
-    ax2.set_xlabel('Time [min]')
+    ax1.set_title('Bus State of Charge Over Time')
+    ax1.set_ylim(0, 105)
+    leg1 = ax1.legend(facecolor='#4A4B50', labelcolor=FG, fontsize=8)
+
+    Power.plot(ax=ax2, color='#4FC3F7', linewidth=1.8, legend=False)
+    ax2.fill_between(Power.index, Power['Power'], alpha=0.15, color='#4FC3F7')
+    ax2.set_xlabel('Timestep [min]')
     ax2.set_ylabel('Power [kW]')
-    ax2.set_title('Charging Power Over Time')
-    # Adjust layout to prevent overlap
-    plt.tight_layout()
-    # Show the figure
+    ax2.set_title('Grid Charging Power Over Time')
+
+    plt.tight_layout(pad=2.5)
     plt.show()

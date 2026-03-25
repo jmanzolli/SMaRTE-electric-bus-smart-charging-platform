@@ -72,10 +72,9 @@ SMaRTE-electric-bus-smart-charging-platform/
 │   ├── Instances/              # Bi-level input files (8–10 buses, various resolutions)
 │   └── Robust/                 # Robust extensions of the bi-level model
 │
-├── GUI/                        # Standalone Tkinter desktop application
+├── GUI/                        # Standalone PyQt6 desktop application
 │   ├── gui.py                  # Application entry point
-│   ├── optimization.py         # Simplified single-level model (Gurobi)
-│   └── assets/frame0/          # UI image assets
+│   └── optimization.py         # Simplified single-level model (Gurobi/CPLEX)
 │
 ├── Instances/                  # Input Excel files
 │   ├── input_deterministic.xlsx
@@ -252,14 +251,15 @@ Each output workbook typically contains sheets for:
 
 **Location:** `GUI/`
 
-A Tkinter-based desktop application titled **"DRIVE-TECH — Moving Sustainability Further"** that provides a no-code interface to the simplified charging optimisation model.
+A PyQt6-based desktop application titled **"DRIVE-TECH - SMaRTE Electric Bus Smart Charging"** that provides a no-code interface to the simplified charging optimisation model.
 
 **Features:**
 - Browse and load any compatible Excel input file
-- Run the MILP optimisation in a background thread (Gurobi solver)
-- Display results in real time: total operational cost reported in the log panel
+- Solver controls: choose `gurobi` or `cplex`, set time limit, and set MIP gap
+- Run the MILP optimisation in a background worker thread
+- Display results in real time: objective value, total energy purchased, solve time, and solver status
 - Interactive plots of bus SOC (%) and grid power demand over the planning horizon
-- Save results to `output.xlsx`
+- Save results to user-selected `.xlsx` output path
 
 **Workflow:**
 
@@ -267,7 +267,7 @@ A Tkinter-based desktop application titled **"DRIVE-TECH — Moving Sustainabili
 Browse input file → Run (Optimise) → View plots → Save results
 ```
 
-> The GUI uses a simplified model variant (`optimization.py`) with a shorter set of constraints suitable for interactive use — no V2G, no peak power tiers — focused on demonstrating core charging schedule optimality.
+> The GUI uses a simplified model variant (`optimization.py`) with a shorter set of constraints suitable for interactive use - no V2G and no peak power tiers - focused on demonstrating core charging schedule optimality.
 
 ---
 
@@ -281,11 +281,12 @@ Browse input file → Run (Optimise) → View plots → Save results
 | Pyomo | 6.1.2 | Modelling layer |
 | gurobipy | 9.5.2 | Required for GUI and some notebooks |
 | CPLEX | 22.1+ | Required for `model_*.py` scripts (path set via `EXEC_PATH`) |
+| PyQt6 | 6.7.1 | Required for desktop GUI |
 | pandas | 1.3.5 | Data I/O |
 | matplotlib | 3.5.1 | Visualisation |
 | openpyxl | 3.0.9 | Excel read/write |
 
-> Either **Gurobi** or **CPLEX** is required depending on the model being run. Academic licences are available from both vendors. The GUI uses Gurobi; the standalone `.py` scripts use CPLEX.
+> Either **Gurobi** or **CPLEX** is required depending on the model being run. Academic licences are available from both vendors. The GUI supports both solvers; the standalone `.py` scripts use CPLEX by default.
 
 ### Installation
 
@@ -331,11 +332,10 @@ python model_sensitivity.py
 ### Running the GUI
 
 ```bash
-cd GUI
-python gui.py
+python3 GUI/gui.py
 ```
 
-> **Note:** The GUI requires `tkinter` (included in the standard CPython distribution on Windows/Linux; on macOS install via `brew install python-tk`).
+> **Note:** The GUI now uses `PyQt6` (installed via `pip install -r requirements.txt`) and does not require `tkinter`.
 
 ---
 
