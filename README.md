@@ -1,4 +1,4 @@
-# SMaRTE — System for the Management and Robustness of Transportation Electrification
+# System for the Management and Robustness of Transportation Electrification
 
 > **Mixed-Integer Linear Programming platform for the optimal smart charging of electric bus fleets**, with support for deterministic, robust, sensitivity, and bi-level market formulations, plus a standalone desktop GUI.
 
